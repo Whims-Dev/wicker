@@ -65,6 +65,7 @@ local SPRITE_PROPERTIES = {
 	Scheduled = {},
 
 	TimePosition = 0,
+	TimeLength = 0,
 	IsPlaying = false
 }
 
@@ -134,6 +135,40 @@ function WickerSprite.Remove<T>(self: Sprite, instance: T & Updatable): T
 	return instance
 end
 
+function WickerSprite.Update(self: Sprite, dt: number)
+	self.TimeLength = self.TotalFrames / self.FPS
+	self.TimePosition = math.clamp(self.TimePosition + dt, 0, self.TotalFrames * (1 / self.FPS))
+
+	local frame = math.floor(self.TimePosition * self.FPS)
+	self.Frame = frame
+
+	local rectSize = self.Dimensions * Vector2.new(1 / self.Frames.X, 1 / self.Frames.Y)
+	local rectOffset = Vector2.new(
+		(frame % self.Frames.X) * rectSize.X,
+		math.floor(frame / self.Frames.X) * rectSize.Y
+	)
+
+	self.ImageRectSize = rectSize
+	self.ImageRectOffset = rectOffset
+
+	for i = 1, #self.Scheduled do
+		local v = self.Scheduled[i] :: any
+		local schedule_type = typeof(v)
+		if (schedule_type == "Instance") then
+			if (v:IsA("ImageLabel")) or (v:IsA("ImageButton")) then
+				v.ImageRectSize = rectSize
+				v.ImageRectOffset = rectOffset
+			end
+		elseif (schedule_type == "function") then
+			v(rectSize, rectOffset)
+		end
+	end
+
+	if (frame >= self.TotalFrames) then
+		self:Clean()
+	end
+end
+
 function WickerSprite.Play(self: Sprite)
 	if (self.IsPlaying) then
 		self.TimePosition = 0
@@ -143,36 +178,7 @@ function WickerSprite.Play(self: Sprite)
 	self.IsPlaying = true
 
 	table.insert(self.Memory, runService.Heartbeat:Connect(function(dt)
-		self.TimePosition = math.clamp(self.TimePosition + dt, 0, self.TotalFrames * (1 / self.FPS))
-
-		local frame = math.floor(self.TimePosition * self.FPS)
-		self.Frame = frame
-
-		local rectSize = self.Dimensions * Vector2.new(1 / self.Frames.X, 1 / self.Frames.Y)
-		local rectOffset = Vector2.new(
-			(frame % self.Frames.X) * rectSize.X,
-			math.floor(frame / self.Frames.X) * rectSize.Y
-		)
-
-		self.ImageRectSize = rectSize
-		self.ImageRectOffset = rectOffset
-
-		for i = 1, #self.Scheduled do
-			local v = self.Scheduled[i] :: any
-			local schedule_type = typeof(v)
-			if (schedule_type == "Instance") then
-				if (v:IsA("ImageLabel")) or (v:IsA("ImageButton")) then
-					v.ImageRectSize = rectSize
-					v.ImageRectOffset = rectOffset
-				end
-			elseif (schedule_type == "function") then
-				v(rectSize, rectOffset)
-			end
-		end
-
-		if (frame >= self.TotalFrames) then
-			self:Clean()
-		end
+		self:Update(dt)
 	end))
 end
 
