@@ -15,7 +15,7 @@
 		FPS           [number]   -- Playback speed in frames per second (default: 10)
 		Dimensions    [Vector2]  -- Full pixel dimensions of the spritesheet image
 		TimePosition  [number]   -- Current playback time in seconds
-		IsPlaying     [boolean]  -- Whether the animation is currently playing
+		IsPlaying     [boolean]  -- Whether the animation is currently playing (read-only)
 	
 	Sprite:AttachToInstance(instance: Instance)
 		Binds the sprite's lifetime to an Instance. The sprite will be
@@ -32,6 +32,12 @@
 	Sprite:Play()
 		Starts playback. If already playing, resets TimePosition to 0.
 		Automatically calls Clean() when the animation reaches its last frame.
+	
+	Sprite:Pause()
+		Pauses playback, preserving TimePosition. Call Play() to resume.
+	
+	Sprite:Stop()
+		Stops playback and resets TimePosition to 0. Does not clean Memory.
 	
 	Sprite:Clean()
 		Stops playback and disconnects all connections in Memory.
@@ -51,13 +57,13 @@ local SPRITE_PROPERTIES = {
 	Frames = Vector2.zero,
 	FPS = 10,
 	Dimensions = Vector2.zero,
-	
+
 	ImageRectSize = Vector2.zero,
 	ImageRectOffset = Vector2.zero,
-	
+
 	Memory = {},
 	Scheduled = {},
-	
+
 	TimePosition = 0,
 	IsPlaying = false
 }
@@ -133,15 +139,15 @@ function WickerSprite.Play(self: Sprite)
 		self.TimePosition = 0
 		return
 	end
-	
+
 	self.IsPlaying = true
-	
+
 	table.insert(self.Memory, runService.Heartbeat:Connect(function(dt)
 		self.TimePosition = math.clamp(self.TimePosition + dt, 0, self.TotalFrames * (1 / self.FPS))
-		
+
 		local frame = math.floor(self.TimePosition * self.FPS)
 		self.Frame = frame
-		
+
 		local rectSize = self.Dimensions * Vector2.new(1 / self.Frames.X, 1 / self.Frames.Y)
 		local rectOffset = Vector2.new(
 			(frame % self.Frames.X) * rectSize.X,
@@ -150,7 +156,7 @@ function WickerSprite.Play(self: Sprite)
 
 		self.ImageRectSize = rectSize
 		self.ImageRectOffset = rectOffset
-		
+
 		for i = 1, #self.Scheduled do
 			local v = self.Scheduled[i] :: any
 			local schedule_type = typeof(v)
@@ -163,11 +169,26 @@ function WickerSprite.Play(self: Sprite)
 				v(rectSize, rectOffset)
 			end
 		end
-		
+
 		if (frame >= self.TotalFrames) then
 			self:Clean()
 		end
 	end))
+end
+
+function WickerSprite.Pause(self: Sprite)
+	if (not self.IsPlaying) then
+		return
+	end
+	self.IsPlaying = false
+	for i = #self.Memory, 1, -1 do
+		individual_clean(table.remove(self.Memory, i))
+	end
+end
+
+function WickerSprite.Stop(self: Sprite)
+	self:Pause()
+	self.TimePosition = 0
 end
 
 function WickerSprite.Clean(self: Sprite)
