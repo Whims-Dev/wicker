@@ -15,6 +15,7 @@
 		FPS           [number]   -- Playback speed in frames per second (default: 10)
 		Dimensions    [Vector2]  -- Full pixel dimensions of the spritesheet image
 		TimePosition  [number]   -- Current playback time in seconds
+		TimeLength    [number]   -- Total animation duration in seconds (derived, read-only)
 		IsPlaying     [boolean]  -- Whether the animation is currently playing (read-only)
 	
 	Sprite:AttachToInstance(instance: Instance)
@@ -69,6 +70,26 @@ local SPRITE_PROPERTIES = {
 	IsPlaying = false
 }
 
+local DERIVED: {[string]: (raw: {[string]: any}) -> any} = {
+	TimeLength = function(raw) return raw.TotalFrames / raw.FPS end,
+}
+
+local DEPENDENTS: {[string]: {string}} = {}
+
+for derived, fn in pairs(DERIVED) do
+	local accessed = {}
+	local probe = setmetatable({}, {
+		__index = function(_, k) accessed[k] = true return SPRITE_PROPERTIES[k] end
+	}) :: any
+	fn(probe)
+	for dep in pairs(accessed) do
+		if (DEPENDENTS[dep] == nil) then
+			DEPENDENTS[dep] = {}
+		end
+		table.insert(DEPENDENTS[dep], derived)
+	end
+end
+
 local WickerSprite = {}
 
 local function deep_copy<T>(original: T): T
@@ -108,10 +129,40 @@ end
 export type Sprite = typeof(setmetatable(SPRITE_PROPERTIES, {__index = WickerSprite}))
 export type Updatable = ImageLabel|ImageButton|(size: Vector2, offset: Vector2) -> ()
 
+local function raw_set(raw: {[string]: any}, key: string, value: any)
+	raw[key] = value
+
+	local deps = DEPENDENTS[key]
+	if (deps == nil) then return end
+
+	for i = 1, #deps do
+		local derived = deps[i]
+		raw[derived] = DERIVED[derived](raw)
+	end
+end
+
 function WickerSprite.new(): Sprite
-	local new_sprite = deep_copy(SPRITE_PROPERTIES)
-	setmetatable(new_sprite, {__index = WickerSprite})
-	return new_sprite
+	local raw = deep_copy(SPRITE_PROPERTIES)
+
+	for derived, fn in pairs(DERIVED) do
+		raw[derived] = fn(raw)
+	end
+
+	local mt = {}
+
+	mt.__index = function(_, key: string): any
+		local v = raw[key]
+		if (v ~= nil) then return v end
+		return WickerSprite[key]
+	end
+
+	mt.__newindex = function(_, key: string, value: any)
+		raw_set(raw, key, value)
+	end
+
+	local proxy = setmetatable({} :: any, mt)
+
+	return proxy
 end
 
 function WickerSprite.AttachToInstance(self: Sprite, instance: Instance)
@@ -136,8 +187,7 @@ function WickerSprite.Remove<T>(self: Sprite, instance: T & Updatable): T
 end
 
 function WickerSprite.Update(self: Sprite, dt: number)
-	self.TimeLength = self.TotalFrames / self.FPS
-	self.TimePosition = math.clamp(self.TimePosition + dt, 0, self.TotalFrames * (1 / self.FPS))
+	self.TimePosition = math.clamp(self.TimePosition + dt, 0, self.TimeLength)
 
 	local frame = math.floor(self.TimePosition * self.FPS)
 	self.Frame = frame
@@ -201,6 +251,13 @@ function WickerSprite.Clean(self: Sprite)
 	self.IsPlaying = false
 	for i = #self.Memory, 1, -1 do
 		individual_clean(table.remove(self.Memory, i))
+	end
+end
+
+function WickerSprite.Reset(self: Sprite)
+	self:Clean()
+	for i, v in pairs(deep_copy(SPRITE_PROPERTIES)) do
+		self[i] = v
 	end
 end
 
