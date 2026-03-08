@@ -181,4 +181,6 @@ function WickerSprite.Destroy(self: Sprite)
 	self:Clean()
 end
 
-return WickerSprite
+return {
+	new = WickerSprite.new
+}
