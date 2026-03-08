@@ -72,7 +72,7 @@ local function deep_copy<T>(original: T): T
 	for k, v in pairs(original) do
 		copy[k] = deep_copy(v)
 	end
-	return setmetatable(copy, getmetatable(original))
+	return setmetatable(copy, getmetatable(original :: any)) :: any
 end
 
 local function individual_clean(v: any)
@@ -98,7 +98,7 @@ local function individual_clean(v: any)
 	end
 end
 
-export type Sprite = setmetatable<typeof(SPRITE_PROPERTIES), {__index: typeof(WickerSprite)}>
+export type Sprite = typeof(setmetatable(SPRITE_PROPERTIES, {__index = WickerSprite}))
 export type Updatable = ImageLabel|ImageButton|(size: Vector2, offset: Vector2) -> ()
 
 function WickerSprite.new(): Sprite
@@ -152,7 +152,7 @@ function WickerSprite.Play(self: Sprite)
 		self.ImageRectOffset = rectOffset
 		
 		for i = 1, #self.Scheduled do
-			local v = self.Scheduled[i]
+			local v = self.Scheduled[i] :: any
 			local schedule_type = typeof(v)
 			if (schedule_type == "Instance") then
 				if (v:IsA("ImageLabel")) or (v:IsA("ImageButton")) then
